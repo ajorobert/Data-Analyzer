@@ -1,3 +1,6 @@
+# Application Files
+NSE-OCA.ini
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
