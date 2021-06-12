@@ -21,6 +21,16 @@ class NseConsts:
         'accept-encoding': 'gzip, deflate, br'}
     units_str: str = 'in K'
     index = "NIFTY"
+    columns_ce: List[str] = ['openInterest', 'changeinOpenInterest', 'totalTradedVolume', 'impliedVolatility',
+                             'lastPrice',
+                             'change', 'bidQty', 'bidprice', 'askPrice', 'askQty', 'strikePrice']
+    columns_pe: List[str] = ['strikePrice', 'bidQty', 'bidprice', 'askPrice', 'askQty', 'change', 'lastPrice',
+                             'impliedVolatility', 'totalTradedVolume', 'changeinOpenInterest', 'openInterest']
+    merged_inner_columns = ['Open Interest', 'Change in Open Interest', 'Traded Volume', 'Implied Volatility',
+                            'Last Traded Price', 'Net Change', 'Bid Quantity', 'Bid Price', 'Ask Price',
+                            'Ask Quantity', 'Strike Price', 'Bid Quantity', 'Bid Price', 'Ask Price',
+                            'Ask Quantity', 'Net Change', 'Last Traded Price', 'Implied Volatility',
+                            'Traded Volume', 'Change in Open Interest', 'Open Interest']
 
 
 class NseData:
@@ -71,6 +81,12 @@ class NseData:
         else:
             return self.get_data_refresh()
 
+    def save_to_debug_file(self, string):
+        if self.debug:
+            f = open("C:\\Users\\ajoro\\Desktop\\debug_json.json", "w")
+            f.write(str(string))
+            f.close()
+
     def refresh_session(self):
         request: Optional[requests.Response] = None
         # Close previous session if applicable
@@ -94,7 +110,9 @@ class NseData:
         try:
             response = self.session.get(url, headers=NseConsts.headers, timeout=5, cookies=self.cookies)
         except Exception as err:
+            self.print_debug("Request: ")
             self.print_debug(request)
+            self.print_debug("Response: ")
             self.print_debug(response)
             print(err, sys.exc_info()[0], "1")
             self.dates.clear()
@@ -120,7 +138,7 @@ class NseData:
             self.dates.append(dates)
 
         self.expiry_date = self.dates[0]
-        self.print_debug("Date configured as :" + str(self.expiry_date))
+        self.print_debug(f"Date configured as : {self.expiry_date}")
         return response, json_data
 
     def get_data_refresh(self) -> Optional[Tuple[Optional[requests.Response], Any]]:
@@ -176,37 +194,24 @@ class NseData:
         df: pandas.DataFrame = pandas.read_json(response.text)
         df = df.transpose()
 
-        ce_values: List[dict] = [data['CE'] for data in json_data['records']['data'] if
-                                 "CE" in data and str(data['expiryDate'].lower() == str(self.expiry_date).lower())]
-        pe_values: List[dict] = [data['PE'] for data in json_data['records']['data'] if
-                                 "PE" in data and str(data['expiryDate'].lower() == str(self.expiry_date).lower())]
+        print(self.expiry_date)
+        ce_values: List[dict] = [data['CE'] for data in json_data['filtered']['data'] if
+                                 "CE" in data]
+        pe_values: List[dict] = [data['PE'] for data in json_data['filtered']['data'] if
+                                 "PE" in data]
         points: float = pe_values[0]['underlyingValue']
         if points == 0:
             for item in pe_values:
                 if item['underlyingValue'] != 0:
                     points = item['underlyingValue']
                     break
-        ce_data: pandas.DataFrame = pandas.DataFrame(ce_values)
-        pe_data: pandas.DataFrame = pandas.DataFrame(pe_values)
-        ce_data_f: pandas.DataFrame = ce_data.loc[ce_data['expiryDate'] == self.expiry_date]
-        pe_data_f: pandas.DataFrame = pe_data.loc[pe_data['expiryDate'] == self.expiry_date]
-        if ce_data_f.empty:
-            print("Invalid Expiry Date.\nPlease restart and enter a new Expiry Date.")
-            return
-        columns_ce: List[str] = ['openInterest', 'changeinOpenInterest', 'totalTradedVolume', 'impliedVolatility',
-                                 'lastPrice',
-                                 'change', 'bidQty', 'bidprice', 'askPrice', 'askQty', 'strikePrice']
-        columns_pe: List[str] = ['strikePrice', 'bidQty', 'bidprice', 'askPrice', 'askQty', 'change', 'lastPrice',
-                                 'impliedVolatility', 'totalTradedVolume', 'changeinOpenInterest', 'openInterest']
-        ce_data_f = ce_data_f[columns_ce]
-        pe_data_f = pe_data_f[columns_pe]
+        ce_data_f: pandas.DataFrame = pandas.DataFrame(ce_values)
+        pe_data_f: pandas.DataFrame = pandas.DataFrame(pe_values)
+        ce_data_f = ce_data_f[NseConsts.columns_ce]
+        pe_data_f = pe_data_f[NseConsts.columns_pe]
         merged_inner: pandas.DataFrame = pandas.merge(left=ce_data_f, right=pe_data_f, left_on='strikePrice',
                                                       right_on='strikePrice')
-        merged_inner.columns = ['Open Interest', 'Change in Open Interest', 'Traded Volume', 'Implied Volatility',
-                                'Last Traded Price', 'Net Change', 'Bid Quantity', 'Bid Price', 'Ask Price',
-                                'Ask Quantity', 'Strike Price', 'Bid Quantity', 'Bid Price', 'Ask Price',
-                                'Ask Quantity', 'Net Change', 'Last Traded Price', 'Implied Volatility',
-                                'Traded Volume', 'Change in Open Interest', 'Open Interest']
+        merged_inner.columns = NseConsts.merged_inner_columns
         current_time: str = df['timestamp']['records']
         return merged_inner, current_time, points
 
@@ -406,7 +411,7 @@ class NseData:
 
     def print_data(self) -> None:
         print(f"Time: {self.str_current_time}. Point: {self.points}")
-        self.print_debug(self.entire_oc)
+        #self.print_debug(self.entire_oc)
         pass
 
     def run_one_step(self):
